@@ -28,12 +28,13 @@ import {ERC20Burnable, ERC20} from "@openzeppelin/contracts/token/ERC20/extensio
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract DeccentralisedStablecoin is ERC20Burnable, Ownable {
-    error DeccentralisedStablecoin_ValueMustBeGreaterThanZero;
-    error DeccentralisedStablecoin_BalanceShouldBeGreaterThanAmount;
 
-    constructor() ERC20("DeccentralisedStablecoin", "DSC") {}
+    error DeccentralisedStablecoin_ValueMustBeGreaterThanZero();
+    error DeccentralisedStablecoin_BalanceShouldBeGreaterThanAmount();
 
-    function burn(uint256 value) external override onlyOwner {
+    constructor(address intialOwner) ERC20("DeccentralisedStablecoin", "DSC") Ownable(intialOwner) {}
+
+    function burn(uint256 value) public override onlyOwner {
         uint256 balance = balanceOf(msg.sender);
         if (value <= 0) {
             revert DeccentralisedStablecoin_ValueMustBeGreaterThanZero();
@@ -44,7 +45,7 @@ contract DeccentralisedStablecoin is ERC20Burnable, Ownable {
         super.burn(value);
     }
 
-    function mint(address to, uint256 value) external override onlyOwner returns (bool) {
+    function mint(address to, uint256 value) external onlyOwner returns (bool) {
         if (value <= 0) {
             revert DeccentralisedStablecoin_ValueMustBeGreaterThanZero();
         }

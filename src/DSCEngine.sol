@@ -38,6 +38,7 @@ pragma solidity ^0.8.18;
 import {DeccentralisedStablecoin} from "./Stablecoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/interfaces/feeds/AggregatorV3Interface.sol";
 
 contract DSCEngine is ReentrancyGuard {
     // Errors-----------------------------------
@@ -45,11 +46,16 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine_AddressMustNotBeZero();
     error DSCEngine_LengthOfTokenAndPriceFeedShouldBeSame();
     error DSCEngine_TransferOfTokenFailed();
+    error DSCEngine_UserIsHealthFactorIsBroken(uint256 healthFactor);
+    error DSCEngine_MintFailed();
+
 
     // State Variables-----------------------------------
-
-    // address public WETH;
-    // address public WBTC;
+    uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
+    uint256 private constant PRECISION = 1e18;
+    uint256 private constant LIQUIDATION_THRESHOLD = 50; //200 % overcollaterlised
+    uint256 private constant MIN_HEALTH_FACTOR = 1;
+    
     mapping(address token => address priceFeed) private s_priceFeeds;
     mapping(address user => mapping(address token => uint256 amount)) private s_userCollateralDeposited;
     mapping(address user => uint256 amountUserMintedDSC) private s_userDSCMinted;
@@ -78,12 +84,14 @@ contract DSCEngine is ReentrancyGuard {
         if (token == address(0)) {
             revert DSCEngine_AddressMustNotBeZero();
         }
-        require(token == address(WETH) || token == address(WBTC), "Token not allowed");
+        require(token == s_collatarelTokensAddress[0] || token == s_collatarelTokensAddress[1], "Token not allowed");
         _;
     }
 
     // Constructor-----------------------------------
 
+    // WBTC 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43 PRICE IN USD
+    // WETH 0x694AA1769357215DE4FAC081bf1f309aDC325306 PRICE IN USD
     constructor(address[] memory tokens, address[] memory priceFeeds, address dscStableCoinAddress) {
         if (tokens.length != priceFeeds.length) {
             revert DSCEngine_LengthOfTokenAndPriceFeedShouldBeSame();
@@ -100,15 +108,12 @@ contract DSCEngine is ReentrancyGuard {
 
     function depositCollateralAndMint() external{}
 
-    /**
+    /***
      * @param tokenColateralAdd address of the token that we want to deposit as collatrel
      * @param amountCollateral amount of the token that we want to deposit as collatrel
-     */
+    */
     function depositCollateral(address tokenCollateralAdd, uint256 amountCollateral)
-        external
-        moreThanZero(amountCollateral)
-        allowedTokens(tokenCollateralAdd)
-        nonReentrant
+        external moreThanZero(amountCollateral) allowedTokens(tokenCollateralAdd) nonReentrant
     {
         s_userCollateralDeposited[msg.sender][tokenCollateralAdd] += amountCollateral;
         emit CollateralDeposited(msg.sender, tokenCollateralAdd, amountCollateral);
@@ -118,6 +123,7 @@ contract DSCEngine is ReentrancyGuard {
             revert DSCEngine_TransferOfTokenFailed();
         }
     }
+
     /**
      * Once the user has deposited the collateral, they can mint DSC with this function
      * 
@@ -130,7 +136,11 @@ contract DSCEngine is ReentrancyGuard {
         // We need to check if the user has enough collatarel to mint the DSC
         // example: if user wants $100 DSC to be minted but they have only $50 collatarel, the transaction should fail
         s_userDSCMinted[msg.sender] += amountToMint;
-        revertIfHealthFactorIsBroken(msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
+        bool minted = i_stableCoin.mint(msg.sender, amountToMint);
+        if(!minted) {
+            revert DSCEngine_MintFailed();
+        }
     }
 
     function redeemCollateralDSC() external {}
@@ -149,10 +159,23 @@ contract DSCEngine is ReentrancyGuard {
 
     // Private & Internal view Functions -----------------------------------
 
-    function _getUserCollatarelAndDSC(address user) private view returns (uint256, uint256) {
-        uint256 userDSCMinted = s_userDSCMinted[msg.sender];
-        uint256 userCollaterelValue = s_userCollateralDeposited[user][address(WETH)] + s_userCollateralDeposited[user][address(WBTC)];
-        return (userCollaterelValue, userDSCMinted);
+    function _getValueInUSD(address tokenAdd,uint256 amount) private view returns(uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[tokenAdd]);
+        (,int price,,,) = priceFeed.latestRoundData();
+        /** 
+         * We'll get price in 8 decimals so we need to convert it to 18 decimals
+         * So price is in 8 decimals so we need to multiply it by 10^10 to get it in 18 decimals
+         * After that price is converted then we can multiply it by the amount of token to get the value in USD
+         * But it is still 18 decimals so we need to divde it by 10^18 to get value in usd
+        */ 
+        return ((uint256(price)*ADDITIONAL_FEED_PRECISION)*amount)/PRECISION;
+    }
+
+    function _getUserCollatarelAndDSCinUSD(address user) private view returns (uint256, uint256) {
+        //below in userDSCMintedUSD the value is Already in USD as our token is pegged to USD but is 18 decimals
+        uint256 userDSCMintedUSD = s_userDSCMinted[user]; 
+        uint256 userCollaterelValueInUSD = getAccountCollateralValueInUSD(user); //there value is in USD
+        return (userCollaterelValueInUSD, userDSCMintedUSD);
     }
     
     /**
@@ -160,21 +183,52 @@ contract DSCEngine is ReentrancyGuard {
      * a user is based on the collatarel they have and the DSC they have minted.
      * 
      * If user goes below a certain health factor, we will liquidate their collatarel
-     * 
-     * 
+     * to make sure the system is overcollaterlised
      */
-    function _healthFactor(address user) private view{
+    function _healthFactor(address user) private view returns(uint256){
         // We need
-        // 1. Total collatarel value of the user
+        // 1. Gathers total amount of collatarel in USD both in DSC and in collatarel staked in the protocol
         // 2. Total DSC minted by the user
+        (uint256 totalCollatarelValueInUSD, uint256 totalDSCMintedInUSD) = _getUserCollatarelAndDSCinUSD(user);
+        return _calculateHealthFactor(totalCollatarelValueInUSD, totalDSCMintedInUSD);
+    }
 
-        (uint256 totalCollatarelValue, uint256 totalDSCMinted) = _getUserCollatarelAndDSC(user);
+    /**
+     * This function is needed because in solidity we can't do decimals number
+     * otherwise we could have done it like directly doing totalCollatarelValueInUSD/totalDSCMintedInUSD 
+     * the value of that should be greater than 1.5 to be overcollaterlised
+     * But we can't do that so we are coverting it in this way
+     */
+    function _calculateHealthFactor(uint256 collatarelValue,uint256 dscValue) internal pure returns(uint256){
+        // $150 Eth /100 dsc = 1.5
+        // $150 * 50 = 7500 => 7500/100 = 75/100 <1 so this user will be liquidated
+
+        // $500 Eth/100 dsc = 5
+        // $500 * 50 = 25000 => 25000/100 = 250/100 >1 so this user is overcollaterlised
+        uint256 collateralAfterAdjustingTheThreshold = (collatarelValue * LIQUIDATION_THRESHOLD)/100;
+        return (collateralAfterAdjustingTheThreshold * PRECISION)/dscValue;
     }
 
     // Check if they have enough collatarel
-    function _revertIfHealthFactorIsBroken(address user) private view {
-        // Check the health factor of the user(do they have enough collatrell to mint the DSC)
-        // Revert if not 
+    function _revertIfHealthFactorIsBroken(address user) internal view {
+        uint256 userHealthFactor = _healthFactor(user);
+        if(userHealthFactor <= MIN_HEALTH_FACTOR) {
+            revert DSCEngine_UserIsHealthFactorIsBroken(userHealthFactor);
+        }
+    }
+
+    // Public, External, Pure and View Functions -----------------------------------
+
+
+    function getAccountCollateralValueInUSD(address user) public view returns(uint256) {
+        uint256 totalCollateralValue = 0;
+        for (uint256 i = 0; i < s_collatarelTokensAddress.length; i++) {
+            address token  = s_collatarelTokensAddress[i];
+            uint256 collatarelAmount = s_userCollateralDeposited[user][token];
+
+            totalCollateralValue += _getValueInUSD(token,collatarelAmount);
+        }
+        return totalCollateralValue;
     }
     
 
