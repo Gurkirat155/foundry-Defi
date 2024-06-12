@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {MockEthFeed} from "@chainlink/contracts/src/mocks/MockEthFeed.sol";
-
 /**
  * @title MockV3Aggregator
  * @notice Based on the FluxAggregator contract
@@ -11,8 +9,8 @@ import {MockEthFeed} from "@chainlink/contracts/src/mocks/MockEthFeed.sol";
  * aggregator contract, but how the aggregator got
  * its answer is unimportant
  */
-contract MockV3Aggregator is MockEthFeed {
-    uint256 public constant version = 4;
+contract MockV3Aggregator {
+    uint256 public constant version = 0;
 
     uint8 public decimals;
     int256 public latestAnswer;
@@ -69,6 +67,6 @@ contract MockV3Aggregator is MockEthFeed {
     }
 
     function description() external pure returns (string memory) {
-        return "v0.6/test/mock/MockV3Aggregator.sol";
+        return "v0.6/tests/MockV3Aggregator.sol";
     }
 }

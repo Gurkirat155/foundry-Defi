@@ -2,8 +2,8 @@
 pragma solidity ^0.8.18;
 
 import {Script} from "forge-std/Script.sol";
-import {MockAggregator} from "../test/mocks/MockAggregator.sol";
-import {MockERC20} from "forge-std/src/mocks/MockERC20.sol";
+import {MockV3Aggregator} from "../test/mocks/MockAggregator.sol";
+import {MockERC20} from "forge-std/mocks/MockERC20.sol";
 
 contract HelperConfig is Script {
     struct NetworkConfig {
@@ -14,20 +14,20 @@ contract HelperConfig is Script {
         uint256 deployerKey;
     }
 
-    uint256 public constant intialWethUSDPrice = 3400e8;
-    uint256 public constant intialWbtcUSDPrice = 67191e8;
-    uint256 public constant decimals = 8;
+    int256 public constant intialWethUSDPrice = 3400e8;
+    int256 public constant intialWbtcUSDPrice = 67191e8;
+    uint8 public constant decimals = 8;
     MockERC20 public mockWethERC20;
     MockERC20 public mockWbtcERC20;
-    MockAggregator public wethPriceFeed;
-    MockAggregator public wbtcPriceFeed;
+    MockV3Aggregator public wethPriceFeed;
+    MockV3Aggregator public wbtcPriceFeed;
 
     NetworkConfig public activeConfig;
 
     constructor() {
-        if (block.chainId == 11155111) {
+        if (block.chainid == 11155111) {
             activeConfig = getSepoliaEthConfig();
-        } else if (block.chainId == 31337) {
+        } else if (block.chainid == 31337) {
             activeConfig = getOrCreateAnvilConfig();
         }
     }
@@ -43,24 +43,23 @@ contract HelperConfig is Script {
         return config;
     }
 
-    function getOrCreateAnvilConfig() public view returns (NetworkConfig memory) {
-        if (activeConfig.priceFeed != address(0)) {
-            return activeConfig;
-        }
+    function getOrCreateAnvilConfig() public returns (NetworkConfig memory) {
+        // if (activeConfig.wethUSDPriceFeed != address(0) && activeConfig.wbtcUSDPriceFeed != address(0)) {
+        //     return activeConfig;
+        // }
 
         vm.startBroadcast();
-        wethPriceFeed = new MockAggregator(intialWethUsdPrice, decimals);
-        // mockWethERC20 = new MockERC20("WETH", "WETH", decimals);
+        wethPriceFeed = new MockV3Aggregator(decimals, intialWethUSDPrice);
+        wbtcPriceFeed = new MockV3Aggregator(decimals, intialWbtcUSDPrice);
         mockWethERC20 = new MockERC20();
         mockWbtcERC20 = new MockERC20();
         mockWethERC20.initialize("WETH", "WETH", decimals);
         mockWbtcERC20.initialize("WBTC", "WBTC", decimals);
-        wbtcPriceFeed = new MockAggregator(intialWbtcUSDPrice, decimals);
         vm.stopBroadcast();
 
         NetworkConfig memory config = NetworkConfig({
-            wethUSDPriceFeed: wethPriceFeed,
-            wbtcUSDPriceFeed: wbtcPriceFeed,
+            wethUSDPriceFeed: address(wethPriceFeed),
+            wbtcUSDPriceFeed: address(wbtcPriceFeed),
             weth: address(mockWethERC20),
             wbtc: address(mockWbtcERC20),
             deployerKey: vm.envUint("ANVIL_PRIVATE_KEY")

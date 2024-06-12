@@ -106,11 +106,11 @@ contract DSCEngine is ReentrancyGuard {
 
     function depositCollateralAndMint() external {}
 
-    /**
-     *
-     * @param tokenColateralAdd address of the token that we want to deposit as collatrel
-     * @param amountCollateral amount of the token that we want to deposit as collatrel
-     */
+    // /**
+    //  *
+    //  * @param tokenColateralAdd address of the token that we want to deposit as collatrel
+    //  * @param amountCollateral amount of the token that we want to deposit as collatrel
+    //  */
     function depositCollateral(address tokenCollateralAdd, uint256 amountCollateral)
         external
         moreThanZero(amountCollateral)
