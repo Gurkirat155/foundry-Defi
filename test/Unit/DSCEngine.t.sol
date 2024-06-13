@@ -1,28 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {Test ,console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
+import {console}  from "forge-std/console.sol";
 import {DeployDSC} from "../../script/DeployDSC.s.sol";
 import {DSCEngine} from "../../src/DSCEngine.sol";
 import {DeccentralisedStablecoin} from "../../src/Stablecoin.sol";
 
-contract TestingDSCEngine is Test,console {
+contract TestingDSCEngine is Test {
 
     DSCEngine dsc_Engine;
     DeccentralisedStablecoin stable_coin;
     DeployDSC deployDSC;
     
-    function run() public {
+    function setUp() public {
         deployDSC = new DeployDSC();
-        (address stablecoin, address dscEngine) = deployDSC.run();
-
-        console.log((stable_coin), (dsc_Engine));
-        stable_coin = stablecoin;
-        dsc_Engine = dscEngine;
+        ( stable_coin,  dsc_Engine) = deployDSC.run();
     }
 
-    function testAddress() public view {
-        // console.log(stablecoin, dscEngine);
-        console.log(address(stable_coin), address(dsc_Engine));
+    function testOwner() public view {
+        address owner = stable_coin.owner();
+        assertEq(owner, address(dsc_Engine),"Owner should be DSCEngine");
     }
 }
