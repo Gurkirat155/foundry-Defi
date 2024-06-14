@@ -104,7 +104,16 @@ contract DSCEngine is ReentrancyGuard {
 
     // External Functions-----------------------------------
 
-    function depositCollateralAndMint() external {}
+    /***
+     * This function will deposit the collatarel and mint dsc in one transaction 
+     * @param tokenCollateralAdd 
+     * @param amountCollateral 
+     * @param amountToMint 
+    */
+    function depositCollateralAndMint(address tokenCollateralAdd, uint256 amountCollateral,uint256 amountToMint) external {
+        depositCollateral( tokenCollateralAdd, amountCollateral);
+        mintDSC(amountToMint);
+    }
 
     // /**
     //  *
@@ -112,7 +121,7 @@ contract DSCEngine is ReentrancyGuard {
     //  * @param amountCollateral amount of the token that we want to deposit as collatrel
     //  */
     function depositCollateral(address tokenCollateralAdd, uint256 amountCollateral)
-        external
+        public
         moreThanZero(amountCollateral)
         allowedTokens(tokenCollateralAdd)
         nonReentrant
@@ -134,7 +143,7 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountToMint amount of DSC to mint
      * @notice they should have more collatarel than the value of DSC to be minted
      */
-    function mintDSC(uint256 amountToMint) external moreThanZero(amountToMint) nonReentrant {
+    function mintDSC(uint256 amountToMint) public moreThanZero(amountToMint) nonReentrant {
         // We need to check if the user has enough collatarel to mint the DSC
         // example: if user wants $100 DSC to be minted but they have only $50 collatarel, the transaction should fail
         s_userDSCMinted[msg.sender] += amountToMint;

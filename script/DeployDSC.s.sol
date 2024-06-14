@@ -7,7 +7,7 @@ import {DSCEngine} from "../src/DSCEngine.sol";
 import {DeccentralisedStablecoin} from "../src/Stablecoin.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 
-contract DeployDSC is Script{
+contract DeployDSC is Script {
     DeccentralisedStablecoin stablecoin;
     DSCEngine dscEngine;
 
@@ -16,24 +16,26 @@ contract DeployDSC is Script{
 
     // ETH 0x694AA1769357215DE4FAC081bf1f309aDC325306 PRICE IN USD
     // BTC 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43 PRICE IN USD
-    function run() external returns (DeccentralisedStablecoin, DSCEngine) {
+    function run() external returns (DeccentralisedStablecoin, DSCEngine, HelperConfig) {
         HelperConfig helperConfig = new HelperConfig();
         (address wethUSDPriceFeed, address wbtcUSDPriceFeed, address weth, address wbtc, uint256 deployerKey) =
             helperConfig.activeConfig();
-        
+
         tokenAddresses = [weth, wbtc];
         priceFeedAddresses = [wethUSDPriceFeed, wbtcUSDPriceFeed];
 
         vm.startBroadcast(deployerKey);
         stablecoin = new DeccentralisedStablecoin(msg.sender);
-        dscEngine = new DSCEngine(tokenAddresses, priceFeedAddresses , address(stablecoin));
+        dscEngine = new DSCEngine(tokenAddresses, priceFeedAddresses, address(stablecoin));
+        console.log(stablecoin.balanceOf(msg.sender));
         vm.stopBroadcast();
-        
+
+
         address owner = stablecoin.owner();
         vm.prank(owner);
         stablecoin.transferOwnership(address(dscEngine));
         vm.stopPrank();
 
-        return (stablecoin, dscEngine);
+        return (stablecoin, dscEngine, helperConfig);
     }
 }
