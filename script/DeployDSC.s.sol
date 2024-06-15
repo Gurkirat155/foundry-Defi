@@ -30,7 +30,6 @@ contract DeployDSC is Script {
         console.log(stablecoin.balanceOf(msg.sender));
         vm.stopBroadcast();
 
-
         address owner = stablecoin.owner();
         vm.prank(owner);
         stablecoin.transferOwnership(address(dscEngine));

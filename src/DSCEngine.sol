@@ -48,6 +48,8 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine_TransferOfTokenFailed();
     error DSCEngine_UserIsHealthFactorIsBroken(uint256 healthFactor);
     error DSCEngine_MintFailed();
+    error DSCEngine_NotEnoughCollatarelDeposited();
+    error DSCEngine_NotEnoughDSCMinted();
 
     // State Variables-----------------------------------
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
@@ -63,6 +65,7 @@ contract DSCEngine is ReentrancyGuard {
 
     // Events-----------------------------------
     event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
+    event CollatarelRedeemed(address indexed user, address indexed token, uint256 amount);
 
     // Modifiers-----------------------------------
     modifier moreThanZero(uint256 value) {
@@ -105,14 +108,27 @@ contract DSCEngine is ReentrancyGuard {
     // External Functions-----------------------------------
 
     /***
-     * This function will deposit the collatarel and mint dsc in one transaction 
-     * @param tokenCollateralAdd 
-     * @param amountCollateral 
-     * @param amountToMint 
-    */
-    function depositCollateralAndMint(address tokenCollateralAdd, uint256 amountCollateral,uint256 amountToMint) external {
-        depositCollateral( tokenCollateralAdd, amountCollateral);
+     *
+     * This function will deposit the collatarel and mint dsc in one transaction
+     * @param tokenCollateralAdd
+     * @param amountCollateral
+     * @param amountToMint
+     */
+    function depositCollateralAndMint(address tokenCollateralAdd, uint256 amountCollateral, uint256 amountToMint)
+        external
+    {
+        depositCollateral(tokenCollateralAdd, amountCollateral);
         mintDSC(amountToMint);
+    }
+
+    /***
+     * @param tokenCollatarelAddress address of the token that we want to redeem
+     * @param amountToRedeem amount of the token that we want to redeem
+     * @param amountToBurn amount of DSC that we want to burn
+     */
+    function redeemCollatarelAndBurn(address tokenCollatarelAddress, uint256 amountToRedeem,uint256 amountToBurn) external {
+        redeemCollateralDSC(tokenCollatarelAddress, amountToRedeem);
+        burnDSC(amountToBurn);
     }
 
     // /**
@@ -154,11 +170,40 @@ contract DSCEngine is ReentrancyGuard {
         }
     }
 
-    function redeemCollateralDSC() external {}
+    // to redeem  the collatarel the user has submitted
+    // TO redeem first we have to check the health factor of the user
+    function redeemCollateralDSC(address tokenCollatarelAddress, uint256 amountToRedeem)
+        public moreThanZero(amountToRedeem) nonReentrant(){
+        
+        if(amountToRedeem <= s_userCollateralDeposited[msg.sender][tokenCollatarelAddress]){
+            revert DSCEngine_NotEnoughCollatarelDeposited();
+        }
+        
+        s_userCollateralDeposited[msg.sender][tokenCollatarelAddress] -= amountToRedeem;
+        emit CollatarelRedeemed(msg.sender, tokenCollatarelAddress, amountToRedeem);
+        bool success = IERC20(tokenCollatarelAddress).transfer(msg.sender,amountToRedeem);
+        if(!success){
+            revert DSCEngine_TransferOfTokenFailed();
+        }
+
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     function checksUSDPrice() internal {}
 
-    function burnDSC() external {}
+    function burnDSC(uint256 amount) moreThanZero(amount) public {
+        if(amount <= s_userDSCMinted[msg.sender]){
+            revert DSCEngine_NotEnoughDSCMinted();
+        }
+
+        s_userDSCMinted[msg.sender] -= amount;
+        bool success = i_stableCoin.transferFrom(msg.sender,address(this), amount);
+        if(!success){
+            revert DSCEngine_TransferOfTokenFailed();
+        }
+        i_stableCoin.burn(amount);
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     // This function will help us when price of Ethereum fluctuatates than the price can become low or high
     // If it is high than it is good because the smart contract is still overcollaterlised but when it drops
