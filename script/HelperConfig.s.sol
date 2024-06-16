@@ -3,7 +3,8 @@ pragma solidity ^0.8.18;
 
 import {Script} from "forge-std/Script.sol";
 import {MockV3Aggregator} from "../test/mocks/MockAggregator.sol";
-import {MockERC20} from "forge-std/mocks/MockERC20.sol";
+// import {MockERC20} from "forge-std/mocks/MockERC20.sol";
+import {ERC20Mock} from "../test/Mocks/MockERC20.sol";
 
 contract HelperConfig is Script {
     struct NetworkConfig {
@@ -17,8 +18,6 @@ contract HelperConfig is Script {
     int256 public constant intialWethUSDPrice = 3400e8;
     int256 public constant intialWbtcUSDPrice = 67191e8;
     uint8 public constant decimals = 8;
-    MockERC20 public mockWethERC20;
-    MockERC20 public mockWbtcERC20;
     MockV3Aggregator public wethPriceFeed;
     MockV3Aggregator public wbtcPriceFeed;
 
@@ -51,10 +50,8 @@ contract HelperConfig is Script {
         vm.startBroadcast();
         wethPriceFeed = new MockV3Aggregator(decimals, intialWethUSDPrice);
         wbtcPriceFeed = new MockV3Aggregator(decimals, intialWbtcUSDPrice);
-        mockWethERC20 = new MockERC20();
-        mockWbtcERC20 = new MockERC20();
-        mockWethERC20.initialize("WETH", "WETH", decimals);
-        mockWbtcERC20.initialize("WBTC", "WBTC", decimals);
+        ERC20Mock mockWethERC20 = new ERC20Mock("WETH", "WETH", msg.sender, 1000e8);
+        ERC20Mock mockWbtcERC20 = new ERC20Mock("WBTC", "WBTC", msg.sender, 1000e8);
         vm.stopBroadcast();
 
         NetworkConfig memory config = NetworkConfig({

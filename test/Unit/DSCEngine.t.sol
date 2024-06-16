@@ -7,7 +7,7 @@ import {DeployDSC} from "../../script/DeployDSC.s.sol";
 import {DSCEngine} from "../../src/DSCEngine.sol";
 import {DeccentralisedStablecoin} from "../../src/Stablecoin.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
-import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {ERC20Mock} from "../Mocks/MockERC20.sol";
 
 contract TestingDSCEngine is Test {
     DSCEngine dsc_Engine;
@@ -22,7 +22,7 @@ contract TestingDSCEngine is Test {
     uint256 deployerKey;
 
     address addr1 = makeAddr("user1");
-    uint256 public constant userCollatarel = 20 ether;
+    uint256 public constant userCollatarel = 10 ether;
     uint256 public constant userBalance = 20 ether;
 
     function setUp() public {
@@ -30,8 +30,12 @@ contract TestingDSCEngine is Test {
         (stable_coin, dsc_Engine, helper_Config) = deployDSC.run();
 
         (wethUSDPriceFeed, wbtcUSDPriceFeed, weth, wbtc, deployerKey) = helper_Config.activeConfig();
-        vm.deal(addr1, userBalance);
+        if (block.chainid == 31_337) {
+             vm.deal(addr1, userBalance);
+        }
+       
         ERC20Mock(weth).mint(addr1, userCollatarel);
+        ERC20Mock(wbtc).mint(addr1, userCollatarel);
     }
 
     function checkMsgsender(address msgSender, address comparedAddress) public pure returns (bool) {
@@ -43,8 +47,9 @@ contract TestingDSCEngine is Test {
         assertEq(owner, address(dsc_Engine), "Owner should be DSCEngine");
     }
 
-    function testCheckOwnerBal() public view returns (uint256) {
-        // vm.prank(dsc_Engine);
+    function testCheckOwnerBal() public returns (uint256) {
+        // vm.startPrank(address(dsc_Engine));
+        vm.startPrank(address(dsc_Engine));
         uint256 bal = stable_coin.balanceOf(address(dsc_Engine));
         uint256 totalSupply = stable_coin.totalSupply();
         console.log("Balance of DSCEngine: ", bal);
@@ -60,14 +65,14 @@ contract TestingDSCEngine is Test {
         dsc_Engine.depositCollateral(weth, 0);
     }
 
-    // function testMintingFunction() public {
-    //     // console.log(weth);
-    //     dsc_Engine.depositCollateral(weth, 1000);
-    //     dsc_Engine.mintDSC(1000);
-    //     // stable_coin.mint(address(dsc_Engine),1000);
-    //     // console.log(stable_coin.totalSupply());
-    //     // assertEq(testCheckOwnerBal(), 1000);
-    // }
+    function testMintingFunction() public {
+        // console.log(weth);
+        dsc_Engine.depositCollateral(weth, 1000);
+        dsc_Engine.mintDSC(1000);
+        stable_coin.mint(address(dsc_Engine),1000);
+        console.log(stable_coin.totalSupply());
+        assertEq(testCheckOwnerBal(), 1000);
+    }
 
     // function testDepositCollateral() public {
     //     dsc_Engine.depositCollateral(weth, 1000);
