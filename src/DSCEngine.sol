@@ -121,7 +121,7 @@ contract DSCEngine is ReentrancyGuard {
         external
     {
         depositCollateral(tokenCollateralAdd, amountCollateral);
-        mintDSC(amountToMint);
+        mintDSC(amountToMint); //this is in usd
     }
 
     /***
@@ -165,6 +165,10 @@ contract DSCEngine is ReentrancyGuard {
     function mintDSC(uint256 amountToMint) public moreThanZero(amountToMint) nonReentrant {
         // We need to check if the user has enough collatarel to mint the DSC
         // example: if user wants $100 DSC to be minted but they have only $50 collatarel, the transaction should fail
+        (uint256 userCollaterelValueInUSD,)= _getUserCollatarelAndDSCinUSD(msg.sender);  
+        if (amountToMint + s_userDSCMinted[msg.sender] >= userCollaterelValueInUSD/10e18 ){
+            revert DSCEngine_NotEnoughCollatarelDeposited();
+        }
         s_userDSCMinted[msg.sender] += amountToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
         bool minted = i_stableCoin.mint(msg.sender, amountToMint);
@@ -186,7 +190,7 @@ contract DSCEngine is ReentrancyGuard {
     function checksUSDPrice() internal {}
 
     function burnDSC(uint256 amount) moreThanZero(amount) public {
-        if(amount <= s_userDSCMinted[msg.sender]){
+        if(amount >= s_userDSCMinted[msg.sender]){
             revert DSCEngine_NotEnoughDSCMinted();
         }
         _burnDSC(amount, msg.sender, msg.sender);
@@ -312,7 +316,7 @@ contract DSCEngine is ReentrancyGuard {
 
     function _redeemCollatarel(address from,address to, address tokenCollatarelAddress,uint256 amountToRedeem) private {
 
-        if(amountToRedeem <= s_userCollateralDeposited[from][tokenCollatarelAddress]){
+        if(amountToRedeem >= s_userCollateralDeposited[from][tokenCollatarelAddress]){
             revert DSCEngine_NotEnoughCollatarelDeposited();
         }
         
@@ -326,7 +330,7 @@ contract DSCEngine is ReentrancyGuard {
     }
 
     function _burnDSC(uint256 amountToBurn,address onBehalfOf, address dscFrom) private {
-        if(amountToBurn <= s_userDSCMinted[onBehalfOf]){
+        if(amountToBurn >= s_userDSCMinted[onBehalfOf]){
             revert DSCEngine_NotEnoughDSCMinted();
         }
         // Bug there is problem the user might have
@@ -367,6 +371,18 @@ contract DSCEngine is ReentrancyGuard {
         // 5000000000000000
         return ((amountInUSDInWei * PRECISION) /uint256(price) * ADDITIONAL_FEED_PRECISION);
     }
+
+    function getAccountInfo(address user) external view returns(uint256,uint256){
+        return _getUserCollatarelAndDSCinUSD(user);
+    }
+
+    function getValueInUSD(address tokenAdd, uint256 amount) public view returns(uint256){
+        return _getValueInUSD(tokenAdd, amount);
+    }
+
+    
+
+
 
     
 }
