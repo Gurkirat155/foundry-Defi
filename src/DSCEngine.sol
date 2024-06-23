@@ -315,7 +315,7 @@ contract DSCEngine is ReentrancyGuard {
         }
     }
 
-    function _redeemCollatarel(address from,address to, address tokenCollatarelAddress,uint256 amountToRedeem) public {
+    function _redeemCollatarel(address from,address to, address tokenCollatarelAddress,uint256 amountToRedeem) private {
 
         // if(amountToRedeem >= s_userCollateralDeposited[from][tokenCollatarelAddress]){
         //     revert DSCEngine_NotEnoughCollatarelDeposited();
@@ -330,7 +330,7 @@ contract DSCEngine is ReentrancyGuard {
 
     }
 
-    function _burnDSC(uint256 amountToBurn,address onBehalfOf, address dscFrom) public {
+    function _burnDSC(uint256 amountToBurn,address onBehalfOf, address dscFrom) private {
         if(amountToBurn >= s_userDSCMinted[onBehalfOf]){
             revert DSCEngine_NotEnoughDSCMinted();
         }
