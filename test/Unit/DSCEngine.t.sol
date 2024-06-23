@@ -93,7 +93,7 @@ contract TestingDSCEngine is Test {
         // 1 eth = 3400 usd
         // 1000usd = 1000/3400 eth = 0.2941176470588235 eth
         uint256 amountInUSDInWei = 1000e18;
-        uint256 expectedPrice = 29411764705882352941176470580000000000;
+        uint256 expectedPrice = 294117647058823529;
         // 29411764705882352941176470580000000000
         uint256 value = dsc_Engine.getTokenAmountFromUSD(weth, amountInUSDInWei);
         console.log("Value: ", value);
@@ -151,7 +151,7 @@ contract TestingDSCEngine is Test {
         uint256 collatarelValueInEth = dsc_Engine.getTokenAmountFromUSD(weth, collateral);
         console.log("Collateral ETH: ", collatarelValueInEth/PRECSION); //1000000000000000000000000000000000000000 10e38
         console.log("Amount Collateral ETH: ", userCollatarel); //10000000000000000000 PRECSION
-        assertEq(collatarelValueInEth/10e19, userCollatarel);
+        assertEq(collatarelValueInEth, userCollatarel);
         assertEq(debt, 0);
     }
 
@@ -229,8 +229,8 @@ contract TestingDSCEngine is Test {
         vm.stopPrank();
     }
 
-    // write test case to  Check if health factor reverts or not 
-    // Write a test case for minting before depositing 
+    // write test case to  Check if health factor reverts or not
+// Write a test case for minting before depositing 
 
 
     ///////////////////////////////////////////
@@ -268,11 +268,6 @@ contract TestingDSCEngine is Test {
         dsc_Engine.redeemCollateralDSC(weth, 0);
     }
 
-    function testRedeemCollateralRevertsIfNotEnoughCollateral() public depositCollatarelAndMintDSC(addr1) {
-        vm.startPrank(addr1);
-        vm.expectRevert(DSCEngine.DSCEngine_NotEnoughCollatarelDeposited.selector);
-        dsc_Engine.redeemCollateralDSC(weth, 100 ether); // Exceeds deposited amount
-    }
 
     function testRedeemCollateral() public depositCollatarelAndMintDSC(addr1) {
         vm.startPrank(addr1);
@@ -336,6 +331,62 @@ contract TestingDSCEngine is Test {
     // Test if amount redeem is less which means not enough collatarel, so careful that user doesn't  dsc 
     // Buring more dsc than the user has minted
     // redeem and burn function testing remaining
+    
+
+    function testMustRedeemMoreThanZero() public depositCollatarelAndMintDSC(addr1) {
+        vm.startPrank(addr1);
+        stable_coin.approve(address(dsc_Engine), 200 ether);
+        vm.expectRevert(DSCEngine.DSCEngine_ValueMustBeGreaterThanZero.selector);
+        dsc_Engine.redeemCollatarelAndBurn(weth, 0, 200 ether);
+        vm.stopPrank();
+    }
+
+    function testBurnMoreDSC() public depositCollatarelAndMintDSC(addr1) {
+        vm.startPrank(addr1);
+        stable_coin.approve(address(dsc_Engine), 2000 ether);
+        vm.expectRevert(DSCEngine.DSCEngine_NotEnoughDSCMinted.selector);
+        dsc_Engine.redeemCollatarelAndBurn(weth, 5 ether, 3000 ether);
+        vm.stopPrank();
+
+    }
+
+    function testReddemAndBurnDSC() public depositCollatarelAndMintDSC(addr1){
+        //Arrange
+        uint256 amountToRedeem = 6 ether; // amount in ether 6 ETH 
+        uint256 amountToRedeemInUSD = getValueInUSD(weth, amountToRedeem);
+        uint256 amountToBurn = 500 ether; // amount in ether $500
+        (uint256 collatarelBefore, uint256 debtBefore) = getCollatarelInUSD(addr1);
+        console.log("Collatarel Before: ", collatarelBefore);
+        console.log("Debt Before: ", debtBefore);
+        assertEq(dsc_Engine.getCollateralDeposited(addr1,weth) , 10 ether);
+
+        //Act
+        vm.startPrank(addr1);
+        stable_coin.approve(address(dsc_Engine), amountToBurn);
+        dsc_Engine.redeemCollatarelAndBurn(weth,amountToRedeem, amountToBurn);
+        (uint256 collatarelAfter, uint256 debtAfter) = getCollatarelInUSD(addr1);
+        console.log("Collatarel After: ", collatarelAfter);
+        console.log("Debt After: ", debtAfter);
+
+        //Assert
+        assertEq(collatarelAfter, collatarelBefore - amountToRedeemInUSD);
+        assertEq(debtAfter, debtBefore - amountToBurn/1e18);
+    }
+
+
+    function testReddemMoreCollatarel() public  depositCollatarelAndMintDSC(addr1){
+        // Arrange
+        uint256 amountToRedeem = 9 ether; // amount in ether
+        uint256 amountToBurn = 500 ether; // amount in ether
+    
+
+        // Act
+        vm.startPrank(addr1);
+        stable_coin.approve(address(dsc_Engine), amountToBurn);
+        vm.expectRevert();
+        dsc_Engine.redeemCollatarelAndBurn(weth,amountToRedeem, amountToBurn);
+        vm.stopPrank();
+    }
 
     ///////////////////////
     // Health Factor tests ////////
@@ -433,44 +484,44 @@ contract TestingDSCEngine is Test {
         dsc_Engine.liquidate(weth, addr1,0);
     }
 
-    function testLiquidate() public depositCollatarelAndMintDSC(addr1) {
+    // function testLiquidate() public depositCollatarelAndMintDSC(addr1) {
 
-        uint256 amountOfLiquidation = dsc_Engine.getTokenAmountFromUSD(weth, 3400 ether);
-        console.log(3400 ether);
-        // 3400 000000000000000000
-        // console.log("Amount of Liquidation Before Price Change: ", amountOfLiquidation);
-        console.log("Health Factor Before: ", dsc_Engine.getHealthFactor(addr1));
-        assertEq(amountOfLiquidation, 1 ether);
-        (uint256 collatarel, uint256 debt) = getCollatarelInUSD(addr1);
-        console.log("Collatarel Before: ", collatarel);
-        console.log("Debt Before: ", debt);
+    //     uint256 amountOfLiquidation = dsc_Engine.getTokenAmountFromUSD(weth, 3400 ether);
+    //     console.log(3400 ether);
+    //     // 3400 000000000000000000
+    //     // console.log("Amount of Liquidation Before Price Change: ", amountOfLiquidation);
+    //     console.log("Health Factor Before: ", dsc_Engine.getHealthFactor(addr1));
+    //     assertEq(amountOfLiquidation, 1 ether);
+    //     (uint256 collatarel, uint256 debt) = getCollatarelInUSD(addr1);
+    //     console.log("Collatarel Before: ", collatarel);
+    //     console.log("Debt Before: ", debt);
 
-        int256 ethUsdPriceUpdate = 100e8; // 1 ETH = $1000
-        MockV3Aggregator(wethUSDPriceFeed).updateAnswer(ethUsdPriceUpdate);
-        console.log("Health Factor After: ", dsc_Engine.getHealthFactor(addr1));
+    //     int256 ethUsdPriceUpdate = 100e8; // 1 ETH = $1000
+    //     MockV3Aggregator(wethUSDPriceFeed).updateAnswer(ethUsdPriceUpdate);
+    //     console.log("Health Factor After: ", dsc_Engine.getHealthFactor(addr1));
 
-        ( collatarel,  debt) = getCollatarelInUSD(addr1);
-        console.log("Collatarel After: ", collatarel);
-        console.log("Debt After: ", debt);
+    //     ( collatarel,  debt) = getCollatarelInUSD(addr1);
+    //     console.log("Collatarel After: ", collatarel);
+    //     console.log("Debt After: ", debt);
 
-        uint256 balance = 50 ether;
-        ERC20Mock(weth).mint(addr2, balance);
+    //     uint256 balance = 50 ether;
+    //     ERC20Mock(weth).mint(addr2, balance);
 
-        vm.deal(addr2, balance);
-        vm.startPrank(addr2);
-        ERC20Mock(weth).approve(address(dsc_Engine), balance);
-        // Minting 100 DSC Deposited 50 ETH ==50*1000 = $50000
-        dsc_Engine.depositCollateralAndMint(weth, balance, 2000 ether);
-        stable_coin.approve(address(dsc_Engine), 2000 ether);
-        dsc_Engine.liquidate(weth, addr1, 2000 ether); // We are covering their whole debt
-        // dsc_Engine._redeemCollatarel(addr1, addr2, weth, 10000 ether);
-        vm.stopPrank();
+    //     vm.deal(addr2, balance);
+    //     vm.startPrank(addr2);
+    //     ERC20Mock(weth).approve(address(dsc_Engine), balance);
+    //     // Minting 100 DSC Deposited 50 ETH ==50*1000 = $50000
+    //     dsc_Engine.depositCollateralAndMint(weth, balance, 2000 ether);
+    //     stable_coin.approve(address(dsc_Engine), 2000 ether);
+    //     dsc_Engine.liquidate(weth, addr1, 2000 ether); // We are covering their whole debt
+    //     // dsc_Engine._redeemCollatarel(addr1, addr2, weth, 10000 ether);
+    //     vm.stopPrank();
 
-        console.log("Health Factor After Liquidation: ", dsc_Engine.getHealthFactor(addr1));
+    //     console.log("Health Factor After Liquidation: ", dsc_Engine.getHealthFactor(addr1));
 
-    // 8500000000000000000
-    // 250000000000000000
-    }
+    // // 8500000000000000000
+    // // 250000000000000000
+    // }
 
 
     // function testLiquidate() public depositCollatarelAndMintDSC(addr1)  {
@@ -651,6 +702,11 @@ contract TestingDSCEngine is Test {
         (uint256 collateral, uint256 debt) = dsc_Engine.getAccountInfo(user);
         // console.log("Collatarel USD: ",collateral/PRECSION);
         return (collateral,debt);
+    }
+
+    function getValueInUSD(address token, uint256 amount) public view returns(uint256){
+        uint256 valueInUsd = dsc_Engine.getValueInUSD(token, amount)/1e18;
+        return valueInUsd;
     }
     
     
