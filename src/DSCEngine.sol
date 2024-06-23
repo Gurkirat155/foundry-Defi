@@ -57,7 +57,7 @@ contract DSCEngine is ReentrancyGuard {
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200 % overcollaterlised
-    uint256 private constant MIN_HEALTH_FACTOR = 1;
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
     uint256 private constant LIQUIDATION_BONUS = 10; //10% bonus to liquidator
 
     mapping(address token => address priceFeed) private s_priceFeeds;
@@ -165,10 +165,10 @@ contract DSCEngine is ReentrancyGuard {
     function mintDSC(uint256 amountToMint) public moreThanZero(amountToMint) nonReentrant {
         // We need to check if the user has enough collatarel to mint the DSC
         // example: if user wants $100 DSC to be minted but they have only $50 collatarel, the transaction should fail
-        (uint256 userCollaterelValueInUSD,)= _getUserCollatarelAndDSCinUSD(msg.sender);  
-        if (amountToMint + s_userDSCMinted[msg.sender] >= userCollaterelValueInUSD/10e18 ){
-            revert DSCEngine_NotEnoughCollatarelDeposited();
-        }
+        // (uint256 userCollaterelValueInUSD,)= _getUserCollatarelAndDSCinUSD(msg.sender);  
+        // if (amountToMint + s_userDSCMinted[msg.sender] >= userCollaterelValueInUSD/1e18 ){
+        //     revert DSCEngine_NotEnoughCollatarelDeposited();
+        // }
         s_userDSCMinted[msg.sender] += amountToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
         bool minted = i_stableCoin.mint(msg.sender, amountToMint);
@@ -252,7 +252,6 @@ contract DSCEngine is ReentrancyGuard {
     }
 
 
-    function getHealthFactor() external view {}
 
     // Private & Internal view Functions -----------------------------------
 
@@ -302,6 +301,8 @@ contract DSCEngine is ReentrancyGuard {
 
         // $500 Eth/100 dsc = 5
         // $500 * 50 = 25000 => 25000/100 = 250/100 >1 so this user is overcollaterlised
+        if (dscValue == 0) return type(uint256).max;
+        if (collatarelValue == 0) return type(uint256).max;
         uint256 collateralAfterAdjustingTheThreshold = (collatarelValue * LIQUIDATION_THRESHOLD) / 100;
         return (collateralAfterAdjustingTheThreshold * PRECISION) / dscValue;
     }
@@ -309,16 +310,16 @@ contract DSCEngine is ReentrancyGuard {
     // Check if they have enough collatarel
     function _revertIfHealthFactorIsBroken(address user) internal view {
         uint256 userHealthFactor = _healthFactor(user);
-        if (userHealthFactor <= MIN_HEALTH_FACTOR) {
+        if (userHealthFactor < MIN_HEALTH_FACTOR) {
             revert DSCEngine_UserIsHealthFactorIsBroken(userHealthFactor);
         }
     }
 
-    function _redeemCollatarel(address from,address to, address tokenCollatarelAddress,uint256 amountToRedeem) private {
+    function _redeemCollatarel(address from,address to, address tokenCollatarelAddress,uint256 amountToRedeem) public {
 
-        if(amountToRedeem >= s_userCollateralDeposited[from][tokenCollatarelAddress]){
-            revert DSCEngine_NotEnoughCollatarelDeposited();
-        }
+        // if(amountToRedeem >= s_userCollateralDeposited[from][tokenCollatarelAddress]){
+        //     revert DSCEngine_NotEnoughCollatarelDeposited();
+        // }
         
         s_userCollateralDeposited[from][tokenCollatarelAddress] -= amountToRedeem;
         emit CollatarelRedeemed(from, to ,tokenCollatarelAddress, amountToRedeem);
@@ -329,7 +330,7 @@ contract DSCEngine is ReentrancyGuard {
 
     }
 
-    function _burnDSC(uint256 amountToBurn,address onBehalfOf, address dscFrom) private {
+    function _burnDSC(uint256 amountToBurn,address onBehalfOf, address dscFrom) public {
         if(amountToBurn >= s_userDSCMinted[onBehalfOf]){
             revert DSCEngine_NotEnoughDSCMinted();
         }
@@ -367,9 +368,9 @@ contract DSCEngine is ReentrancyGuard {
         // but we have eth/usd we will divide amountInUSD/(eth/usd) = we will get the price
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[tokenAdd]);
         (, int256 price,,,) = priceFeed.latestRoundData();
-        // ($10e18 * 1e18) / 2000e8 * 1e10 = 5e15 
-        // 5000000000000000
-        return ((amountInUSDInWei * PRECISION) /uint256(price) * ADDITIONAL_FEED_PRECISION);
+        // ($3400e18 * 1e18) / 3400e8 * 1e10 = 1e18
+        // 500000
+        return ((amountInUSDInWei * PRECISION) /(uint256(price) * ADDITIONAL_FEED_PRECISION));
     }
 
     function getAccountInfo(address user) external view returns(uint256,uint256){
@@ -380,7 +381,13 @@ contract DSCEngine is ReentrancyGuard {
         return _getValueInUSD(tokenAdd, amount);
     }
 
+    function getHealthFactor(address user) external view returns(uint256){
+        return _healthFactor(user);
+    }
     
+    function getCollateralDeposited(address user, address token) external view returns(uint256){
+        return s_userCollateralDeposited[user][token];
+    }
 
 
 
